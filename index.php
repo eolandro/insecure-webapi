@@ -176,7 +176,7 @@ $f3->route('POST /Imagen',
 
 		//se agregan variables para tamaño y extensiones
 		$allowed_exts = ['png', 'jpg', 'jpeg', 'gif'];
-		$max_file_size = 5 * 1024 * 1024; // 5MB
+		$max_file_size = 10 * 1024; // 10KB
 
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
