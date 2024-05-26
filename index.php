@@ -1,9 +1,10 @@
 <?php 
-function loadDatabaseSettings($pathjs){
-	$string = file_get_contents($pathjs);
-	$json_a = json_decode($string, true);
-	return $json_a;
-}
+
+//se acceden a las env para la db
+$db_host = getenv('DB_HOST');
+$db_user = getenv('DB_USER');
+$db_pass = getenv('DB_PASS');
+$db_name = getenv('DB_NAME');
 
 function getToken(){
 	//creamos el objeto fecha y obtuvimos la cantidad de segundos desde el 1ª enero 1970
@@ -50,13 +51,9 @@ $f3->route('GET /saludo/@nombre',
  * */
 
 $f3->route('POST /Registro',
-	function($f3) {
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
+		
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
@@ -97,14 +94,11 @@ $f3->route('POST /Registro',
 
 
 $f3->route('POST /Login',
-	function($f3) {
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
+		
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
@@ -150,7 +144,7 @@ $f3->route('POST /Login',
  * */
 
 $f3->route('POST /Imagen',
-	function($f3) {
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
 		//Directorio
 		if (!file_exists('tmp')) {
 			mkdir('tmp');
@@ -169,13 +163,9 @@ $f3->route('POST /Imagen',
 			return;
 		}
 		
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
 		// Validar si el usuario esta en la base de datos
 		$TKN = $jsB['token'];
 		
@@ -213,14 +203,11 @@ $f3->route('POST /Imagen',
 
 
 $f3->route('POST /Descargar',
-	function($f3) {
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
+		
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+		
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
