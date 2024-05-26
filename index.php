@@ -267,14 +267,28 @@ $f3->route('POST /Descargar',
 			echo '{"R":-2}';
 			return;
 		}
-		
-		// Buscar imagen y enviarla
-		try {
-			$R = $db->exec('Select name,ruta from  Imagen where id = '.$idImagen);
-		}catch (Exception $e) {
-			echo '{"R":-3}';
+
+		if (empty($R)) {
+			echo '{"R":-3, "msg":"Token Invalido"}';
 			return;
 		}
+		
+		$userId = $R[0]['id_Usuario'];
+
+		// Buscar imagen y enviarla
+		try {
+			$R = $db->exec('select name, ruta from Imagen where id = "'$idImagen,'" and id_Usuario = '"$userId"';');
+
+		}catch (Exception $e) {
+			echo '{"R":-4}';
+			return;
+		}
+
+		if (empty($R)) {
+			echo '{"R":-5, "msg":"Acceso denegado a imagen"}';
+			return;
+		}
+		
 		$web = \Web::instance();
 		ob_start();
 		// send the file without any download dialog
