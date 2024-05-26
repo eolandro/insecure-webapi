@@ -29,6 +29,15 @@ create table if not exists Imagen(
 	PRIMARY KEY (id)
 )ENGINE=InnoDB;
 
+CREATE TABLE IF NOT EXISTS LoginAudit (
+	id INT AUTO_INCREMENT PRIMARY KEY,
+	user_id INT,
+	username VARCHAR(50),
+	timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+	success BOOLEAN,
+	FOREIGN KEY (user_id) REFERENCES Usuario(id) ON DELETE SET NULL
+)ENGINE=InnoDB;
+
 ALTER TABLE Usuario
 ADD CONSTRAINT U_U
 Unique (uname,email); 

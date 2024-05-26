@@ -12,3 +12,9 @@ RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule .* index.php [END,QSA]
 RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
+
+#se configuran variables de entorno para bd
+SetEnv DB_HOST "localhost"
+SetEnv DB_USER "dcwebapps"
+SetEnv DB_PASS "adminserve"
+SetEnv DB_NAME "webapps"
