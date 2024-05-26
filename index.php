@@ -68,7 +68,8 @@ $f3->route('POST /Registro',
 		// TODO validar correo en json
 		// TODO Control de error de la $DB
 		try {
-			$R = $db->exec('insert into Usuario values(null,"'.$jsB['uname'].'","'.$jsB['email'].'",md5("'.$jsB['password'].'"))');
+			$hashed_password = password_hash($jsB['password'], PASSWORD_BCRYPT);
+			$R = $db->exec('insert into Usuario values(null,"'.$jsB['uname'].'","'.$jsB['email'].'","'.$hashed_password.'")');
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -112,7 +113,7 @@ $f3->route('POST /Login',
 		// TODO validar correo en json
 		// TODO Control de error de la $DB
 		try {
-			$R = $db->exec('Select id from  Usuario where uname ="'.$jsB['uname'].'" and password = md5("'.$jsB['password'].'");');
+			$R = $db->exec('Select id, password from  Usuario where uname ="'.$jsB['uname'].'");');
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -121,6 +122,14 @@ $f3->route('POST /Login',
 			echo '{"R":-3}';
 			return;
 		}
+
+		//si no es coinciden el uname con el pwd, entonces no inicia sesión
+		user = $R[0];
+        if (!password_verify($jsB['password'], $user['password'])) {
+                echo '{"R":-4, "msg":"Invalid username or password"}';
+                return;
+        }
+
 		$T = getToken();
 		//file_put_contents('/tmp/log','insert into AccesoToken values('.$R[0].',"'.$T.'",now())');
 		$db->exec('Delete from AccesoToken where id_Usuario = "'.$R[0]['id'].'";');
