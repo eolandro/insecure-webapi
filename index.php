@@ -126,9 +126,12 @@ $f3->route('POST /Login',
 		//si no es coinciden el uname con el pwd, entonces no inicia sesión
 		user = $R[0];
         if (!password_verify($jsB['password'], $user['password'])) {
-                echo '{"R":-4, "msg":"Invalid username or password"}';
-                return;
+			$db->exec('insert into LoginAudit (username, success) VALUES ("'$jsB['uname']'", 0)');
+			echo '{"R":-4, "msg":"Invalid username or password"}';
+			return;
         }
+
+		$db->exec('insert into LoginAudit (user_id, username, success) VALUES ("'$user['id']'", "'$jsB['uname']'", 1)');
 
 		$T = getToken();
 		//file_put_contents('/tmp/log','insert into AccesoToken values('.$R[0].',"'.$T.'",now())');
