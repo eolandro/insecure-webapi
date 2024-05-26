@@ -69,7 +69,8 @@ $f3->route('POST /Registro',
 		// TODO Control de error de la $DB
 		try {
 			$hashed_password = password_hash($jsB['password'], PASSWORD_BCRYPT);
-			$R = $db->exec('insert into Usuario values(null,"'.$jsB['uname'].'","'.$jsB['email'].'","'.$hashed_password.'")');
+			$stmt = $db->prepare('INSERT INTO Usuario (uname, email, password) VALUES (?, ?, ?)');
+			$R = $stmt->execute([$jsB['uname'], $jsB['email'], $hashed_password]);
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -113,7 +114,9 @@ $f3->route('POST /Login',
 		// TODO validar correo en json
 		// TODO Control de error de la $DB
 		try {
-			$R = $db->exec('Select id, password from  Usuario where uname ="'.$jsB['uname'].'");');
+			$stmt = $db->prepare('SELECT id, password FROM Usuario WHERE uname = ?');
+			$stmt->execute([$jsB['uname']]);
+			$R = $stmt->fetchAll();
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -126,17 +129,23 @@ $f3->route('POST /Login',
 		//si no es coinciden el uname con el pwd, entonces no inicia sesión
 		user = $R[0];
         if (!password_verify($jsB['password'], $user['password'])) {
-			$db->exec('insert into LoginAudit (username, success) VALUES ("'$jsB['uname']'", 0)');
+			$stmt = $db->prepare('INSERT INTO LoginAudit (username, success) VALUES (?, ?)');
+			$stmt->execute([$jsB['uname'], false]);
 			echo '{"R":-4, "msg":"Invalid username or password"}';
 			return;
         }
 
-		$db->exec('insert into LoginAudit (user_id, username, success) VALUES ("'$user['id']'", "'$jsB['uname']'", 1)');
+		$stmt = $db->prepare('INSERT INTO LoginAudit (user_id, username, success) VALUES (?, ?, ?)');
+		$stmt->execute([$user['id'], $jsB['uname'], true]);
 
 		$T = getToken();
-		//file_put_contents('/tmp/log','insert into AccesoToken values('.$R[0].',"'.$T.'",now())');
-		$db->exec('Delete from AccesoToken where id_Usuario = "'.$R[0]['id'].'";');
-		$R = $db->exec('insert into AccesoToken values('.$R[0]['id'].',"'.$T.'",now())');
+
+		$stmt = $db->prepare('DELETE FROM AccesoToken WHERE id_Usuario = ?');
+		$stmt->execute([$user['id']]);
+
+		$stmt = $db->prepare('INSERT INTO AccesoToken (id_Usuario, token, fecha_creacion) VALUES (?, ?, now())');
+		$stmt->execute([$user['id'], $T]);
+
 		echo "{\"R\":0,\"D\":\"".$T."\"}";
 	}
 );
@@ -208,7 +217,9 @@ $f3->route('POST /Imagen',
 		$TKN = $jsB['token'];
 		
 		try {
-			$R = $db->exec('select id_Usuario from AccesoToken where token = "'.$TKN.'"');
+			$stmt = $db->prepare('SELECT id_Usuario FROM AccesoToken WHERE token = ?');
+			$stmt->execute([$TKN]);
+			$R = $stmt->fetchAll();
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -219,10 +230,18 @@ $f3->route('POST /Imagen',
 		////////////////////////////////////////////////////////
 		////////////////////////////////////////////////////////
 		// Guardar info del archivo en la base de datos
-		$R = $db->exec('insert into Imagen values(null,"'.$jsB['name'].'","img/",'.$id_Usuario.');');
-		$R = $db->exec('select max(id) as idImagen from Imagen where id_Usuario = '.$id_Usuario);
+		$stmt = $db->prepare('INSERT INTO Imagen (name, ruta, id_Usuario) VALUES (?, "img/", ?)');
+        $stmt->execute([$jsB['name'], $id_Usuario]);
+		
+        $stmt = $db->prepare('SELECT max(id) as idImagen FROM Imagen WHERE id_Usuario = ?');
+        $stmt->execute([$id_Usuario]);
+        $R = $stmt->fetchAll();
+
 		$idImagen = $R[0]['idImagen'];
-		$R = $db->exec('update Imagen set ruta = "img/'.$idImagen.'.'.$jsB['ext'].'" where id = '.$idImagen);
+
+		$stmt = $db->prepare('UPDATE Imagen SET ruta = ? WHERE id = ?');
+        $stmt->execute(['img/'.$idImagen.'.'.$jsB['ext'], $idImagen]);
+
 		// Mover archivo a su nueva locacion
 		rename('tmp/'.$id_Usuario,'img/'.$idImagen.'.'.$jsB['ext']);
 		echo "{\"R\":0,\"D\":".$jsB['name']."}";
@@ -262,7 +281,9 @@ $f3->route('POST /Descargar',
 		$TKN = $jsB['token'];
 		$idImagen = $jsB['id'];
 		try {
-			$R = $db->exec('select id_Usuario from AccesoToken where token = "'.$TKN.'"');
+			$stmt = $db->prepare('SELECT id_Usuario FROM AccesoToken WHERE token = ?');
+			$stmt->execute([$TKN]);
+			$Rt = $stmt->fetchAll();
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -277,8 +298,9 @@ $f3->route('POST /Descargar',
 
 		// Buscar imagen y enviarla
 		try {
-			$R = $db->exec('select name, ruta from Imagen where id = "'$idImagen,'" and id_Usuario = '"$userId"';');
-
+			$stmt = $db->prepare('SELECT name, ruta FROM Imagen WHERE id = ? AND id_Usuario = ?');
+			$stmt->execute([$idImagen, $userId]);
+			$R = $stmt->fetchAll();
 		}catch (Exception $e) {
 			echo '{"R":-4}';
 			return;
@@ -288,7 +310,7 @@ $f3->route('POST /Descargar',
 			echo '{"R":-5, "msg":"Acceso denegado a imagen"}';
 			return;
 		}
-		
+
 		$web = \Web::instance();
 		ob_start();
 		// send the file without any download dialog
