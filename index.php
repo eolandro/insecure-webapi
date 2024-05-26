@@ -152,6 +152,11 @@ $f3->route('POST /Imagen',
 		if (!file_exists('img')) {
 			mkdir('img');
 		}
+
+		//se agregan variables para tamaño y extensiones
+		$allowed_exts = ['png', 'jpg', 'jpeg', 'gif'];
+		$max_file_size = 5 * 1024 * 1024; // 5MB
+
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
@@ -165,6 +170,27 @@ $f3->route('POST /Imagen',
 		
 		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
+		//se valida la extensión del archivo
+		$ext = strtolower($jsB['ext']);
+		if (!in_array($ext, $allowed_exts)) {
+				echo '{"R":-1, "msg":"Invalid file type"}';
+				return;
+		}
+
+		//se verifica que la data sea base64 válida
+		$data = $jsB['data'];
+		if (!base64_decode($data, true)) {
+				echo '{"R":-1, "msg":"Invalid base64 data"}';
+				return;
+		}
+
+		//se limita el tamaño del archivo
+		$decoded_data = base64_decode($data);
+		if (strlen($decoded_data) > $max_file_size) {
+				echo '{"R":-1, "msg":"File size exceeds limit"}';
+				return;
+		}
 
 		// Validar si el usuario esta en la base de datos
 		$TKN = $jsB['token'];
@@ -187,7 +213,8 @@ $f3->route('POST /Imagen',
 		$R = $db->exec('update Imagen set ruta = "img/'.$idImagen.'.'.$jsB['ext'].'" where id = '.$idImagen);
 		// Mover archivo a su nueva locacion
 		rename('tmp/'.$id_Usuario,'img/'.$idImagen.'.'.$jsB['ext']);
-		echo "{\"R\":0,\"D\":".$idImagen."}";
+		echo "{\"R\":0,\"D\":".$jsB['name']."}";
+
 	}
 );
 /*
@@ -207,7 +234,7 @@ $f3->route('POST /Descargar',
 		
 		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
-		
+
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
