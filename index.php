@@ -1,9 +1,10 @@
 <?php 
-function loadDatabaseSettings($pathjs){
-	$string = file_get_contents($pathjs);
-	$json_a = json_decode($string, true);
-	return $json_a;
-}
+
+//se acceden a las env para la db
+$db_host = getenv('DB_HOST');
+$db_user = getenv('DB_USER');
+$db_pass = getenv('DB_PASS');
+$db_name = getenv('DB_NAME');
 
 function getToken(){
 	//creamos el objeto fecha y obtuvimos la cantidad de segundos desde el 1ª enero 1970
@@ -50,13 +51,9 @@ $f3->route('GET /saludo/@nombre',
  * */
 
 $f3->route('POST /Registro',
-	function($f3) {
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
+		
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
@@ -71,7 +68,9 @@ $f3->route('POST /Registro',
 		// TODO validar correo en json
 		// TODO Control de error de la $DB
 		try {
-			$R = $db->exec('insert into Usuario values(null,"'.$jsB['uname'].'","'.$jsB['email'].'",md5("'.$jsB['password'].'"))');
+			$hashed_password = password_hash($jsB['password'], PASSWORD_BCRYPT);
+			$stmt = $db->prepare('INSERT INTO Usuario (uname, email, password) VALUES (?, ?, ?)');
+			$R = $stmt->execute([$jsB['uname'], $jsB['email'], $hashed_password]);
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -97,14 +96,11 @@ $f3->route('POST /Registro',
 
 
 $f3->route('POST /Login',
-	function($f3) {
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
+		
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
@@ -118,7 +114,9 @@ $f3->route('POST /Login',
 		// TODO validar correo en json
 		// TODO Control de error de la $DB
 		try {
-			$R = $db->exec('Select id from  Usuario where uname ="'.$jsB['uname'].'" and password = md5("'.$jsB['password'].'");');
+			$stmt = $db->prepare('SELECT id, password FROM Usuario WHERE uname = ?');
+			$stmt->execute([$jsB['uname']]);
+			$R = $stmt->fetchAll();
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -127,10 +125,27 @@ $f3->route('POST /Login',
 			echo '{"R":-3}';
 			return;
 		}
+
+		//si no es coinciden el uname con el pwd, entonces no inicia sesión
+		user = $R[0];
+        if (!password_verify($jsB['password'], $user['password'])) {
+			$stmt = $db->prepare('INSERT INTO LoginAudit (username, success) VALUES (?, ?)');
+			$stmt->execute([$jsB['uname'], false]);
+			echo '{"R":-4, "msg":"Invalid username or password"}';
+			return;
+        }
+
+		$stmt = $db->prepare('INSERT INTO LoginAudit (user_id, username, success) VALUES (?, ?, ?)');
+		$stmt->execute([$user['id'], $jsB['uname'], true]);
+
 		$T = getToken();
-		//file_put_contents('/tmp/log','insert into AccesoToken values('.$R[0].',"'.$T.'",now())');
-		$db->exec('Delete from AccesoToken where id_Usuario = "'.$R[0]['id'].'";');
-		$R = $db->exec('insert into AccesoToken values('.$R[0]['id'].',"'.$T.'",now())');
+
+		$stmt = $db->prepare('DELETE FROM AccesoToken WHERE id_Usuario = ?');
+		$stmt->execute([$user['id']]);
+
+		$stmt = $db->prepare('INSERT INTO AccesoToken (id_Usuario, token, fecha_creacion) VALUES (?, ?, now())');
+		$stmt->execute([$user['id'], $T]);
+
 		echo "{\"R\":0,\"D\":\"".$T."\"}";
 	}
 );
@@ -150,7 +165,7 @@ $f3->route('POST /Login',
  * */
 
 $f3->route('POST /Imagen',
-	function($f3) {
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
 		//Directorio
 		if (!file_exists('tmp')) {
 			mkdir('tmp');
@@ -158,6 +173,11 @@ $f3->route('POST /Imagen',
 		if (!file_exists('img')) {
 			mkdir('img');
 		}
+
+		//se agregan variables para tamaño y extensiones
+		$allowed_exts = ['png', 'jpg', 'jpeg', 'gif'];
+		$max_file_size = 10 * 1024; // 10KB
+
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
@@ -169,18 +189,37 @@ $f3->route('POST /Imagen',
 			return;
 		}
 		
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
+		//se valida la extensión del archivo
+		$ext = strtolower($jsB['ext']);
+		if (!in_array($ext, $allowed_exts)) {
+				echo '{"R":-1, "msg":"Invalid file type"}';
+				return;
+		}
+
+		//se verifica que la data sea base64 válida
+		$data = $jsB['data'];
+		if (!base64_decode($data, true)) {
+				echo '{"R":-1, "msg":"Invalid base64 data"}';
+				return;
+		}
+
+		//se limita el tamaño del archivo
+		$decoded_data = base64_decode($data);
+		if (strlen($decoded_data) > $max_file_size) {
+				echo '{"R":-1, "msg":"File size exceeds limit"}';
+				return;
+		}
+
 		// Validar si el usuario esta en la base de datos
 		$TKN = $jsB['token'];
 		
 		try {
-			$R = $db->exec('select id_Usuario from AccesoToken where token = "'.$TKN.'"');
+			$stmt = $db->prepare('SELECT id_Usuario FROM AccesoToken WHERE token = ?');
+			$stmt->execute([$TKN]);
+			$R = $stmt->fetchAll();
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
@@ -191,13 +230,22 @@ $f3->route('POST /Imagen',
 		////////////////////////////////////////////////////////
 		////////////////////////////////////////////////////////
 		// Guardar info del archivo en la base de datos
-		$R = $db->exec('insert into Imagen values(null,"'.$jsB['name'].'","img/",'.$id_Usuario.');');
-		$R = $db->exec('select max(id) as idImagen from Imagen where id_Usuario = '.$id_Usuario);
+		$stmt = $db->prepare('INSERT INTO Imagen (name, ruta, id_Usuario) VALUES (?, "img/", ?)');
+        $stmt->execute([$jsB['name'], $id_Usuario]);
+		
+        $stmt = $db->prepare('SELECT max(id) as idImagen FROM Imagen WHERE id_Usuario = ?');
+        $stmt->execute([$id_Usuario]);
+        $R = $stmt->fetchAll();
+
 		$idImagen = $R[0]['idImagen'];
-		$R = $db->exec('update Imagen set ruta = "img/'.$idImagen.'.'.$jsB['ext'].'" where id = '.$idImagen);
+
+		$stmt = $db->prepare('UPDATE Imagen SET ruta = ? WHERE id = ?');
+        $stmt->execute(['img/'.$idImagen.'.'.$jsB['ext'], $idImagen]);
+
 		// Mover archivo a su nueva locacion
 		rename('tmp/'.$id_Usuario,'img/'.$idImagen.'.'.$jsB['ext']);
-		echo "{\"R\":0,\"D\":".$idImagen."}";
+		echo "{\"R\":0,\"D\":".$jsB['name']."}";
+
 	}
 );
 /*
@@ -213,14 +261,11 @@ $f3->route('POST /Imagen',
 
 
 $f3->route('POST /Descargar',
-	function($f3) {
-		$dbcnf = loadDatabaseSettings('db.json');
-		$db=new DB\SQL(
-			'mysql:host=localhost;port='.$dbcnf['port'].';dbname='.$dbcnf['dbname'],
-			$dbcnf['user'],
-			$dbcnf['password']
-		);
+	function($f3) use ($db_host, $db_user, $db_pass, $db_name) {
+		
+		$db = new DB\SQL("mysql:host=$db_host;dbname=$db_name", $db_user, $db_pass);
 		$db->setAttribute(\PDO::ATTR_ERRMODE, \PDO::ERRMODE_EXCEPTION);
+
 		/////// obtener el cuerpo de la peticion
 		$Cuerpo = $f3->get('BODY');
 		$jsB = json_decode($Cuerpo,true);
@@ -236,19 +281,36 @@ $f3->route('POST /Descargar',
 		$TKN = $jsB['token'];
 		$idImagen = $jsB['id'];
 		try {
-			$R = $db->exec('select id_Usuario from AccesoToken where token = "'.$TKN.'"');
+			$stmt = $db->prepare('SELECT id_Usuario FROM AccesoToken WHERE token = ?');
+			$stmt->execute([$TKN]);
+			$Rt = $stmt->fetchAll();
 		} catch (Exception $e) {
 			echo '{"R":-2}';
 			return;
 		}
-		
-		// Buscar imagen y enviarla
-		try {
-			$R = $db->exec('Select name,ruta from  Imagen where id = '.$idImagen);
-		}catch (Exception $e) {
-			echo '{"R":-3}';
+
+		if (empty($R)) {
+			echo '{"R":-3, "msg":"Token Invalido"}';
 			return;
 		}
+		
+		$userId = $R[0]['id_Usuario'];
+
+		// Buscar imagen y enviarla
+		try {
+			$stmt = $db->prepare('SELECT name, ruta FROM Imagen WHERE id = ? AND id_Usuario = ?');
+			$stmt->execute([$idImagen, $userId]);
+			$R = $stmt->fetchAll();
+		}catch (Exception $e) {
+			echo '{"R":-4}';
+			return;
+		}
+
+		if (empty($R)) {
+			echo '{"R":-5, "msg":"Acceso denegado a imagen"}';
+			return;
+		}
+
 		$web = \Web::instance();
 		ob_start();
 		// send the file without any download dialog
